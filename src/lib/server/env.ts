@@ -66,3 +66,15 @@ export function accessPolicy(c: ServerConfig): AccessPolicy {
   if (c.isProduction && !c.publicAccess) return { kind: "misconfigured", reason: "Set ACCESS_PASSWORD (recommended) or PUBLIC_ACCESS=true" };
   return { kind: "open" };
 }
+
+export type SetupIssue = "api_key_missing" | "access_password_missing" | "session_secret_short" | "redis_missing";
+
+/** Names of missing settings only — never values. Lets the sign-in screen say exactly what to fix. */
+export function setupIssues(c: ServerConfig): SetupIssue[] {
+  const out: SetupIssue[] = [];
+  if (!c.apiKey) out.push("api_key_missing");
+  if (!c.accessPassword && c.isProduction && !c.publicAccess) out.push("access_password_missing");
+  if (c.accessPassword && (!c.sessionSecret || c.sessionSecret.length < 32)) out.push("session_secret_short");
+  if (c.isProduction && c.rateLimitMode === "on" && !(c.redisUrl && c.redisToken)) out.push("redis_missing");
+  return out;
+}

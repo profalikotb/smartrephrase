@@ -21,6 +21,7 @@ interface SessionInfo {
   required: boolean;
   authenticated: boolean;
   configured: boolean;
+  issues?: string[];
 }
 
 const THEMES: ThemePref[] = ["system", "light", "dark"];
@@ -640,7 +641,7 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
           notify(t.privacy.deleted);
         }}
       />
-      {session?.required && !session.authenticated && <LoginGate t={t} onSuccess={refreshSession} />}
+      {session?.required && !session.authenticated && <LoginGate t={t} onSuccess={refreshSession} issues={session.issues} />}
     </div>
   );
 }

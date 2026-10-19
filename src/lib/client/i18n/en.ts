@@ -160,6 +160,13 @@ export const en = {
     close: "Close",
   },
 
+  setup: {
+    title: "Setup incomplete — fix in Vercel → Settings → Environment Variables, then Redeploy:",
+    api_key_missing: "GEMINI_API_KEY is not set",
+    access_password_missing: "ACCESS_PASSWORD is not set",
+    session_secret_short: "SESSION_SECRET is missing or shorter than 32 characters",
+    redis_missing: "Rate-limit storage missing: connect Upstash for Redis (Storage tab) or set RATE_LIMIT_MODE=off",
+  },
   login: { title: "Sign in", body: "This deployment is private.", password: "Access password", submit: "Sign in", wrong: "Incorrect password.", tooMany: "Too many attempts. Try again in a minute." },
   footer: { model: "Model", limit: "Limit {n} characters" },
 } as const;

@@ -162,6 +162,13 @@ export const ar: Dict = {
     close: "إغلاق",
   },
 
+  setup: {
+    title: "الإعداد غير مكتمل — أصلحه من Vercel ← Settings ← Environment Variables ثم Redeploy:",
+    api_key_missing: "لم يُضبط GEMINI_API_KEY",
+    access_password_missing: "لم يُضبط ACCESS_PASSWORD",
+    session_secret_short: "SESSION_SECRET غير موجود أو أقصر من 32 حرفًا",
+    redis_missing: "تخزين تحديد المعدل غير موجود: اربط Upstash for Redis من تبويب Storage أو اضبط RATE_LIMIT_MODE=off",
+  },
   login: { title: "تسجيل الدخول", body: "هذا التطبيق خاص.", password: "كلمة مرور الدخول", submit: "دخول", wrong: "كلمة المرور غير صحيحة.", tooMany: "محاولات كثيرة. حاول بعد دقيقة." },
   footer: { model: "النموذج", limit: "الحد {n} حرف" },
 };

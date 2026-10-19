@@ -128,7 +128,7 @@ export function PrivacyDialog({
   );
 }
 
-export function LoginGate({ t, onSuccess }: { t: Dict; onSuccess: () => void }) {
+export function LoginGate({ t, onSuccess, issues = [] }: { t: Dict; onSuccess: () => void; issues?: string[] }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -144,7 +144,15 @@ export function LoginGate({ t, onSuccess }: { t: Dict; onSuccess: () => void }) 
       if (res.ok) {
         setPw("");
         onSuccess();
-      } else setErr(res.status === 429 ? t.login.tooMany : res.status === 401 ? t.login.wrong : t.errors.not_configured);
+      } else {
+        let code: string | undefined;
+        try {
+          code = ((await res.json()) as { error?: { code?: string } }).error?.code;
+        } catch {
+          /* non-JSON */
+        }
+        setErr(res.status === 429 && code === "rate_limited" ? t.login.tooMany : res.status === 401 ? t.login.wrong : code && code in t.errors ? t.errors[code as keyof Dict["errors"]] : t.errors.not_configured);
+      }
     } catch {
       setErr(navigator.onLine === false ? t.errors.offline : t.errors.network);
     } finally {
@@ -159,6 +167,16 @@ export function LoginGate({ t, onSuccess }: { t: Dict; onSuccess: () => void }) 
           {t.login.title}
         </h2>
         <p className="mt-1 text-sm text-muted">{t.login.body}</p>
+        {issues.length > 0 && (
+          <div role="alert" className="mt-3 rounded-lg bg-warn-soft p-3 text-[13px] leading-relaxed text-warn">
+            <p className="font-semibold">{t.setup.title}</p>
+            <ul className="mt-1 list-disc ps-5">
+              {issues.map((i) => (
+                <li key={i}>{(t.setup as Record<string, string>)[i] ?? i}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         <label className="mt-4 block">
           <span className="text-[11px] font-medium uppercase tracking-wide text-muted">{t.login.password}</span>
           <input

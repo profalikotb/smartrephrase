@@ -76,3 +76,12 @@ describe("auth & config", () => {
     expect((await l.limit("generate", "k")).ok).toBe(true);
   });
 });
+
+describe("setup diagnostics", () => {
+  it("names missing settings without exposing values", async () => {
+    const { setupIssues } = await import("@/lib/server/env");
+    expect(setupIssues(getConfig(env({ NODE_ENV: "production", ACCESS_PASSWORD: "pw", SESSION_SECRET: "short" })))).toEqual(["api_key_missing", "session_secret_short", "redis_missing"]);
+    expect(setupIssues(getConfig(env({ NODE_ENV: "production", GEMINI_API_KEY: "k", ACCESS_PASSWORD: "pw", SESSION_SECRET: "s".repeat(40), KV_REST_API_URL: "https://x", KV_REST_API_TOKEN: "t" })))).toEqual([]);
+    expect(setupIssues(getConfig(env({ NODE_ENV: "production", GEMINI_API_KEY: "k", ACCESS_PASSWORD: "pw", SESSION_SECRET: "s".repeat(40), RATE_LIMIT_MODE: "off" })))).toEqual([]);
+  });
+});

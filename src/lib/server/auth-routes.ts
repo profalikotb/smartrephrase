@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { accessPolicy, getConfig } from "./env";
+import { accessPolicy, getConfig, setupIssues } from "./env";
 import { SESSION_COOKIE, clearSessionCookie, createSessionToken, passwordMatches, readCookie, sessionCookie, verifySessionToken } from "./auth";
 import { clientKey, getLimiter } from "./rate-limit";
 import { isSameOrigin, jsonResponse, readCappedText } from "./security";
@@ -14,10 +14,12 @@ function secure(req: Request): boolean {
 export async function sessionStatus(req: Request): Promise<Response> {
   const cfg = getConfig();
   const policy = accessPolicy(cfg);
-  if (policy.kind === "misconfigured") return jsonResponse({ required: true, authenticated: false, configured: false }, 200);
-  if (policy.kind === "open") return jsonResponse({ required: false, authenticated: true, configured: Boolean(cfg.apiKey) }, 200);
+  const issues = setupIssues(cfg);
+  const configured = issues.length === 0;
+  if (policy.kind === "misconfigured") return jsonResponse({ required: true, authenticated: false, configured: false, issues }, 200);
+  if (policy.kind === "open") return jsonResponse({ required: false, authenticated: true, configured, issues }, 200);
   const ok = Boolean(verifySessionToken(readCookie(req.headers.get("cookie"), SESSION_COOKIE), cfg.sessionSecret!));
-  return jsonResponse({ required: true, authenticated: ok, configured: Boolean(cfg.apiKey) }, 200);
+  return jsonResponse({ required: true, authenticated: ok, configured, issues }, 200);
 }
 
 export async function login(req: Request): Promise<Response> {
