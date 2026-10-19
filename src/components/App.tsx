@@ -15,7 +15,7 @@ import { Controls } from "./Controls";
 import { ResultPane, type ResultView } from "./ResultPane";
 import { ConfirmDialog, LoginGate, PrivacyDialog, Toast } from "./Dialogs";
 import { Button, Chip } from "./ui";
-import { IconLogout, IconMonitor, IconMoon, IconPaste, IconRetry, IconShield, IconSparkle, IconStop, IconSun, IconTrash, IconWifiOff } from "./icons";
+import { IconLogout, IconMonitor, IconMoon, IconPaste, IconRetry, IconCheck, IconCopy, IconShare, IconShield, IconSparkle, IconStop, IconSun, IconTrash, IconWifiOff } from "./icons";
 
 interface SessionInfo {
   required: boolean;
@@ -33,6 +33,8 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
   const [restorable, setRestorable] = useState<string | null>(null);
   const [tab, setTab] = useState<"original" | "result">("original");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [canShare, setCanShare] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<string[]>([]);
@@ -295,6 +297,22 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
     }
   }, [notify, t]);
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- feature detection after mount
+    setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+  }, []);
+
+  /** Native share sheet (WhatsApp, Mail, Notes…) — the fastest way to use a result on a phone. */
+  const share = useCallback(async () => {
+    const text = view.kind === "result" || view.kind === "partial" ? view.text : "";
+    if (!text) return;
+    try {
+      await navigator.share({ text });
+    } catch {
+      /* user dismissed the share sheet */
+    }
+  }, [view]);
+
   const download = useCallback(() => {
     const text = view.kind === "result" || view.kind === "partial" ? view.text : "";
     if (!text) return;
@@ -428,18 +446,33 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
     }
   }, [state, t, elapsed, prefs.uiLang, op, online, wasOffline]);
 
-  const tone = state.status === "error" || state.status === "timed_out" ? "danger" : state.status === "offline" ? "warn" : state.status === "completed" && !state.partial ? "accent" : "neutral";
+  const tone: "danger" | "warn" | "success" | "info" | "accent" | "neutral" =
+    state.status === "error" || state.status === "timed_out"
+      ? "danger"
+      : state.status === "offline" || state.status === "retrying" || (state.status === "completed" && state.partial)
+        ? "warn"
+        : state.status === "completed"
+          ? "success"
+          : state.status === "connecting"
+            ? "info"
+            : state.status === "generating"
+              ? "accent"
+              : "neutral";
+  const TONE_CLASS = { danger: "bg-danger-soft text-danger", warn: "bg-warn-soft text-warn", success: "bg-success-soft text-success", info: "bg-info-soft text-info", accent: "bg-accent-soft text-accent", neutral: "bg-surface-2 text-muted" } as const;
+  const hasResultText = view.kind === "result" && Boolean(view.text);
   const showRetry = !inFlight && state.errorCode !== undefined && MANUALLY_RETRYABLE.has(state.errorCode) && state.errorCode !== "cancelled" && op !== undefined;
   const offlineNow = !online;
+  const mobileResultActions = tab === "result" && hasResultText && !inFlight && !showRetry;
 
   const sourcePane = (
     <section aria-labelledby="source-heading" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow)]">
       <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-line px-3">
         <div className="flex min-w-0 items-center gap-2">
+          <span className="h-5 w-1.5 shrink-0 rounded-full bg-source" aria-hidden />
           <h2 id="source-heading" className="text-sm font-semibold">
             {t.editor.sourceLabel}
           </h2>
-          {source.trim() && <Chip>{t.detected[detected]}</Chip>}
+          {source.trim() && <Chip tone="source">{t.detected[detected]}</Chip>}
         </div>
         <div className="flex items-center gap-0.5">
           {restorable !== null && (
@@ -526,18 +559,18 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
 
       <div className="mx-auto flex min-h-0 w-full max-w-[1400px] flex-1 flex-col gap-2 px-3 pt-2 sm:px-4 lg:gap-3 lg:pt-3">
         {/* Header */}
-        <header className={`no-print flex shrink-0 items-center justify-between gap-2 ${keyboardOpen ? "hidden" : ""}`}>
+        <header className={`no-print bg-brand flex shrink-0 items-center justify-between gap-2 rounded-2xl px-2.5 py-2 text-white shadow-[var(--shadow)] sm:px-3 [&_button]:!text-white [&_button:hover]:!bg-white/15 ${keyboardOpen ? "hidden" : ""}`}>
           <div className="flex min-w-0 items-center gap-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icon.svg" alt="" width={32} height={32} className="h-8 w-8 shrink-0 rounded-[9px]" />
+            <img src="/icon.svg" alt="" width={34} height={34} className="h-[34px] w-[34px] shrink-0 rounded-[10px] ring-1 ring-white/30" />
             <div className="min-w-0 leading-tight">
-              <p className="truncate text-[11.5px] font-medium text-muted">{t.brand}</p>
-              <h1 className="truncate text-[15px] font-semibold tracking-tight">{t.appName}</h1>
+              <p className="truncate text-[11.5px] font-medium text-white/80">{t.brand}</p>
+              <h1 className="truncate text-[15.5px] font-semibold tracking-tight">{t.appName}</h1>
             </div>
           </div>
           <nav className="flex items-center gap-0.5" aria-label={t.ui.language}>
             {offlineNow && (
-              <span className="me-1 inline-flex items-center gap-1 rounded-full bg-warn-soft px-2 py-1 text-[11.5px] font-medium text-warn" role="status">
+              <span className="me-1 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[11.5px] font-semibold text-warn" role="status">
                 <IconWifiOff width={14} height={14} />
                 <span className="hidden sm:inline">{t.status.offline.split(".")[0]}</span>
               </span>
@@ -564,7 +597,7 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
           </nav>
         </header>
 
-        <Controls t={t} options={prefs.options} onChange={setOptions} moreOpen={moreOpen} setMoreOpen={setMoreOpen} onReset={resetOptions} compact={keyboardOpen} />
+        <Controls t={t} options={prefs.options} onChange={setOptions} moreOpen={moreOpen} setMoreOpen={setMoreOpen} sheetOpen={sheetOpen} setSheetOpen={setSheetOpen} onReset={resetOptions} compact={keyboardOpen} />
 
         {/* Mobile tabs */}
         <div role="tablist" aria-label={`${t.tabs.original} / ${t.tabs.result}`} className="grid shrink-0 grid-cols-2 gap-1 rounded-xl border border-line bg-surface p-0.5 lg:hidden">
@@ -577,10 +610,11 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
               aria-selected={tab === k}
               aria-controls={`panel-${k}`}
               onClick={() => setTab(k)}
-              className={`relative h-8 rounded-[10px] text-[13px] font-medium transition-colors ${tab === k ? "bg-accent-soft text-accent" : "text-muted hover:text-ink"}`}
+              className={`tap relative h-9 rounded-[10px] text-[13.5px] font-semibold transition-colors ${tab === k ? (k === "original" ? "bg-source-soft text-source" : "bg-accent-soft text-accent") : "text-muted hover:text-ink"}`}
             >
               {t.tabs[k]}
               {k === "result" && inFlight && tab !== "result" && <span className="absolute end-3 top-1/2 h-2 w-2 -translate-y-1/2 animate-pulse rounded-full bg-accent" aria-hidden />}
+              {k === "result" && !inFlight && tab !== "result" && hasResultText && <span className="absolute end-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-success" aria-hidden />}
             </button>
           ))}
         </div>
@@ -598,27 +632,49 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
 
       {/* Action bar — in normal flow at the bottom of a visual-viewport-sized shell, so the iOS keyboard never covers it */}
       <div className="no-print safe-bottom mx-auto w-full max-w-[1400px] shrink-0 px-3 pt-2 sm:px-4">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-line bg-surface p-1.5 shadow-[var(--shadow)]">
-          <div className={`min-w-0 flex-1 px-1.5 ${showRetry ? "max-sm:basis-full max-sm:pt-0.5" : ""}`} aria-live="polite" role="status">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-surface p-1.5 shadow-[var(--shadow)]">
+          <div className={`min-w-0 flex-1 ${showRetry || mobileResultActions || (statusText && !inFlight) ? "max-sm:basis-full" : ""} ${!statusText ? "max-sm:hidden" : ""}`} aria-live="polite" role="status">
             {statusText ? (
-              <p className={`line-clamp-2 text-[12.5px] leading-snug ${tone === "danger" ? "text-danger" : tone === "warn" ? "text-warn" : tone === "accent" ? "text-accent" : "text-muted"}`}>{statusText}</p>
+              <p className={`inline-flex max-w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-[12.5px] font-medium leading-snug ${TONE_CLASS[tone]}`}>
+                <span className={`status-dot ${inFlight ? "live" : ""}`} aria-hidden />
+                <span className="line-clamp-2">{statusText}</span>
+              </p>
             ) : (
-              <p className="hidden truncate text-[12px] text-muted sm:block">
+              <p className="truncate px-1.5 text-[12px] text-muted">
                 {t.footer.model}: <span dir="ltr">{modelName}</span> · {fmt(t.footer.limit, { n: maxChars }, prefs.uiLang)} · <span dir="ltr">{t.actions.shortcut}</span>
               </p>
             )}
           </div>
           {showRetry && (
-            <Button variant="soft" icon={<IconRetry width={16} height={16} />} onClick={retry} disabled={!canSubmit && !op} className="max-sm:flex-1 max-sm:justify-center">
+            <Button variant="soft" icon={<IconRetry width={16} height={16} />} onClick={retry} disabled={!canSubmit && !op} className="tap max-sm:h-12 max-sm:flex-1 max-sm:justify-center">
               {t.actions.retry}
             </Button>
           )}
+          {mobileResultActions && (
+            <div className="flex flex-1 gap-1.5 sm:hidden">
+              <Button variant="soft" icon={copied ? <IconCheck width={18} height={18} /> : <IconCopy width={18} height={18} />} onClick={copy} className="tap h-12 flex-1 justify-center text-[15px]">
+                {copied ? t.actions.copied : t.actions.copyResult}
+              </Button>
+              {canShare && (
+                <Button variant="soft" iconOnly icon={<IconShare width={19} height={19} />} onClick={share} className="tap !h-12 !w-12" title={t.actions.share}>
+                  {t.actions.share}
+                </Button>
+              )}
+            </div>
+          )}
           {inFlight ? (
-            <Button variant="danger" icon={<IconStop width={16} height={16} />} onClick={rp.cancel} className={`min-w-[7.5rem] justify-center ${showRetry ? "max-sm:flex-1" : ""}`}>
+            <Button variant="danger" icon={<IconStop width={16} height={16} />} onClick={rp.cancel} className="tap min-w-[7.5rem] justify-center max-sm:h-12 max-sm:flex-1 max-sm:text-[15px]">
               {t.actions.stop}
             </Button>
           ) : (
-            <Button variant="primary" icon={<IconSparkle width={17} height={17} />} onClick={rephrase} disabled={!canSubmit} className={`min-w-[7.5rem] justify-center ${showRetry ? "max-sm:flex-1" : ""}`} title={t.actions.shortcut}>
+            <Button
+              variant="cta"
+              icon={<IconSparkle width={18} height={18} />}
+              onClick={rephrase}
+              disabled={!canSubmit}
+              className={`tap min-w-[7.5rem] justify-center max-sm:h-12 max-sm:text-[15px] ${mobileResultActions ? "max-sm:min-w-0 max-sm:flex-none max-sm:px-4" : "max-sm:flex-1"}`}
+              title={t.actions.shortcut}
+            >
               {t.actions.rephrase}
             </Button>
           )}

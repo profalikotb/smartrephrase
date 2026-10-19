@@ -12,7 +12,7 @@ test("Arabic RTL rewrite end-to-end (real SDK → mock Gemini) with no horizonta
   await page.getByRole("textbox", { name: "النص الأصلي" }).fill(AR_SRC);
   await page.screenshot({ path: `test-results/${info.project.name}-1-input.png` });
   await page.getByRole("button", { name: "إعادة صياغة" }).click();
-  await expect(page.getByText("اكتملت")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("status").getByText("اكتملت")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("يحتاج إلى مراجعتك")).toBeVisible();
   await expect(page.locator("#panel-result")).toContainText("Pregabalin");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -25,11 +25,20 @@ test("English, dark theme, more options", async ({ page }, info) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
   await page.getByRole("textbox", { name: "Original text" }).fill("the results shows that 63% of patient improved (p=0.04) [12], however this do not proves causation.");
-  await page.getByRole("button", { name: /More options/ }).click();
-  await page.screenshot({ path: `test-results/${info.project.name}-3-options-dark.png` });
-  await page.getByRole("button", { name: /More options/ }).click();
+  if (info.project.name === "mobile") {
+    await page.getByRole("button", { name: /Settings/ }).click();
+    await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+    await page.getByRole("radio", { name: "Medical" }).click();
+    await page.screenshot({ path: `test-results/${info.project.name}-3-options-dark.png` });
+    await page.getByRole("button", { name: "Done" }).click();
+    await expect(page.getByRole("button", { name: /Medical/ })).toBeVisible();
+  } else {
+    await page.getByRole("button", { name: /More options/ }).click();
+    await page.screenshot({ path: `test-results/${info.project.name}-3-options-dark.png` });
+    await page.getByRole("button", { name: /More options/ }).click();
+  }
   await page.getByRole("button", { name: "Rephrase", exact: true }).click();
-  await expect(page.getByText("Done", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("status").getByText("Done", { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.locator("#panel-result")).toContainText("does not prove causation");
   await page.screenshot({ path: `test-results/${info.project.name}-4-result-en-dark.png` });
 });

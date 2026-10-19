@@ -70,11 +70,15 @@ export function ResultPane(p: Props) {
   const actionable = view.kind === "result" && !p.busy;
 
   return (
-    <section aria-labelledby="result-heading" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow)]">
-      <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-line px-3">
-        <h2 id="result-heading" className="text-sm font-semibold">
-          {t.editor.resultLabel}
-        </h2>
+    <section aria-labelledby="result-heading" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-result-line bg-result shadow-[var(--shadow)]">
+      <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-result-line px-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={`h-5 w-1.5 shrink-0 rounded-full bg-accent ${view.kind === "live" ? "animate-pulse" : ""}`} aria-hidden />
+          <h2 id="result-heading" className="text-sm font-semibold">
+            {t.editor.resultLabel}
+          </h2>
+          {view.kind === "result" && <Chip tone="success">{t.status.completed}</Chip>}
+        </div>
         <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
           {p.inputChanged && hasText && <Chip tone="warn">{t.editor.inputChanged}</Chip>}
           {p.settingsChanged && !p.inputChanged && view.kind === "result" && <Chip tone="neutral">{t.more.settingsChanged}</Chip>}
@@ -157,13 +161,13 @@ export function ResultPane(p: Props) {
           <div className="border-t border-line px-4 py-3">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{t.result.alternatives}</h3>
             {p.alternatives.live !== undefined ? (
-              <div className="prose-text rounded-xl border border-line bg-surface-2 p-3">
+              <div className="prose-text rounded-xl border border-result-line bg-surface p-3">
                 {p.alternatives.live ? <BidiText text={p.alternatives.live} fallbackDir={fallback} streaming /> : <div className="h-3 w-2/3 animate-pulse rounded bg-line/60" />}
               </div>
             ) : (
               <div className="grid gap-2">
                 {p.alternatives.versions!.map((v, i) => (
-                  <article key={i} className="rounded-xl border border-line bg-surface-2 p-3">
+                  <article key={i} className="rounded-xl border border-result-line bg-surface p-3">
                     <div className="mb-1 flex items-center justify-between">
                       <span className="text-xs font-medium text-muted">{fmt(t.result.alternative, { n: i + 1 }, p.lang)}</span>
                       <Button compact variant="soft" onClick={() => p.actions.useAlternative(v)}>
@@ -181,7 +185,7 @@ export function ResultPane(p: Props) {
         )}
       </div>
 
-      <footer className="no-scrollbar flex shrink-0 items-center gap-0.5 justify-between sm:justify-start overflow-x-auto border-t border-line px-1.5 py-1.5">
+      <footer className="no-scrollbar flex shrink-0 items-center gap-0.5 justify-between sm:justify-start overflow-x-auto border-t border-result-line px-1.5 py-1.5">
         <Button compact collapseLabel icon={p.copied ? <IconCheck width={16} height={16} /> : <IconCopy width={16} height={16} />} title={t.actions.copy} onClick={p.actions.copy} disabled={!hasText || p.editing}>
           {p.copied ? t.actions.copied : t.actions.copy}
         </Button>

@@ -22,6 +22,8 @@ export const ar: Dict = {
   detected: { ar: "عربي", en: "إنجليزي", mixed: "مختلط", unknown: "—" },
 
   more: {
+    settings: "الإعدادات",
+    apply: "تم",
     toggle: "خيارات إضافية",
     preserveTerms: "مصطلحات يجب الإبقاء عليها",
     preserveTermsHint: "أسماء أو مصطلحات فنية أو صياغات مفضّلة — افصل بينها بفاصلة أو سطر جديد",
@@ -47,6 +49,8 @@ export const ar: Dict = {
   },
 
   actions: {
+    share: "مشاركة",
+    copyResult: "نسخ النتيجة",
     paste: "لصق",
     rephrase: "إعادة صياغة",
     stop: "إيقاف",

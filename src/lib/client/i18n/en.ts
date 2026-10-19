@@ -20,6 +20,8 @@ export const en = {
   detected: { ar: "Arabic", en: "English", mixed: "Mixed", unknown: "—" },
 
   more: {
+    settings: "Settings",
+    apply: "Done",
     toggle: "More options",
     preserveTerms: "Preserve these terms",
     preserveTermsHint: "Names, technical terms or preferred wording — separate with commas or new lines",
@@ -45,6 +47,8 @@ export const en = {
   },
 
   actions: {
+    share: "Share",
+    copyResult: "Copy result",
     paste: "Paste",
     rephrase: "Rephrase",
     stop: "Stop",

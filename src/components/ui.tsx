@@ -2,10 +2,11 @@
 
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
-type Variant = "primary" | "ghost" | "soft" | "danger";
+type Variant = "primary" | "cta" | "ghost" | "soft" | "danger";
 
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-accent text-accent-ink hover:brightness-110 active:brightness-95 shadow-[var(--shadow)] disabled:opacity-45",
+  cta: "bg-cta text-white font-semibold hover:brightness-110 active:scale-[0.98] disabled:opacity-50",
   ghost: "text-ink hover:bg-surface-2 active:bg-line/60 disabled:opacity-40",
   soft: "bg-accent-soft text-accent hover:brightness-[0.97] dark:hover:brightness-110 disabled:opacity-45",
   danger: "bg-danger text-white hover:brightness-110 disabled:opacity-45",
@@ -66,7 +67,7 @@ export function Segmented<T extends string>({ label, value, onChange, options, n
             aria-checked={active}
             name={name}
             onClick={() => onChange(o.value)}
-            className={`h-8 shrink-0 whitespace-nowrap rounded-[10px] px-3 text-[13px] font-medium transition-colors ${active ? "bg-accent text-accent-ink shadow-sm" : "text-muted hover:bg-surface-2 hover:text-ink"}`}
+            className={`tap h-8 shrink-0 whitespace-nowrap rounded-[10px] px-3 text-[13px] font-medium transition-colors ${active ? "bg-brand text-white shadow-sm" : "text-muted hover:bg-surface-2 hover:text-ink"}`}
           >
             {o.label}
           </button>
@@ -92,12 +93,42 @@ export function Toggle({ id, label, hint, checked, onChange, disabled }: { id: s
   );
 }
 
-export function Chip({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "accent" | "warn" | "danger" }) {
+export function Chip({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "accent" | "warn" | "danger" | "info" | "success" | "source" }) {
   const tones = {
     neutral: "bg-surface-2 text-muted border-line",
     accent: "bg-accent-soft text-accent border-transparent",
+    info: "bg-info-soft text-info border-transparent",
+    success: "bg-success-soft text-success border-transparent",
+    source: "bg-source-soft text-source border-transparent",
     warn: "bg-warn-soft text-warn border-transparent",
     danger: "bg-danger-soft text-danger border-transparent",
   };
   return <span className={`inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full border px-2 text-[11.5px] font-medium ${tones[tone]}`}>{children}</span>;
+}
+
+/** Tap-friendly single-choice chips — used in the mobile settings sheet instead of dropdowns. */
+export function ChipGroup<T extends string>({ label, value, onChange, options, name }: { label: string; value: T; onChange: (v: T) => void; options: { value: T; label: string }[]; name: string }) {
+  return (
+    <fieldset className="min-w-0">
+      <legend className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</legend>
+      <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
+        {options.map((o) => {
+          const active = o.value === value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              name={name}
+              onClick={() => onChange(o.value)}
+              className={`tap h-9 rounded-full border px-3.5 text-[13.5px] font-medium transition-colors ${active ? "border-transparent bg-brand text-white shadow-sm" : "border-line bg-surface text-ink hover:border-accent/50 hover:bg-accent-soft"}`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
 }

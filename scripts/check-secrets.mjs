@@ -3,7 +3,7 @@
  * Verifies that no secret can reach the browser or source control.
  * 1. Rebuild-free scan of everything served to browsers (.next/static + prerendered HTML) for:
  *    - the literal value of GEMINI_API_KEY / ACCESS_PASSWORD / SESSION_SECRET / Redis token (if set at build time)
- *    - Google API key shapes (AIza…), and server-only env names.
+ *    - Google API key shapes (AIza…), and client code reading server-only env vars.
  * 2. Scan of git-tracked (or, outside git, all project) files for key shapes and committed .env files.
  * Exit code 1 on any finding.
  */
@@ -38,7 +38,8 @@ if (!clientFiles.length) {
 for (const f of clientFiles) {
   const s = readFileSync(f, "utf8");
   for (const v of secretValues) if (s.includes(v)) findings.push(`secret VALUE present in client asset ${relative(root, f)}`);
-  for (const n of SERVER_ONLY_NAMES) if (s.includes(n)) findings.push(`server-only env name "${n}" referenced in client asset ${relative(root, f)}`);
+  // Variable *names* may appear in help text; reading them from process.env in client code may not.
+  for (const n of SERVER_ONLY_NAMES) if (s.includes(`process.env.${n}`) || s.includes(`env["${n}"]`)) findings.push(`server-only env var "${n}" read in client asset ${relative(root, f)}`);
   if (KEY_SHAPE.test(s)) findings.push(`Google API key pattern in client asset ${relative(root, f)}`);
   KEY_SHAPE.lastIndex = 0;
 }
