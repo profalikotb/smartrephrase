@@ -70,3 +70,22 @@ test("security headers and no secret in served HTML", async ({ request }) => {
   const api = await request.post("/api/rephrase", { data: {}, headers: { origin: "https://evil.example" } });
   expect(api.status()).toBe(403);
 });
+
+test("abbreviations: real keyboard typing expands, suggestions and manager work", async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem("sr:prefs:v1", JSON.stringify({ uiLang: "en", theme: "light" })));
+  await page.goto("/");
+  const ed = page.getByRole("textbox", { name: "Original text" });
+  await ed.click();
+  await page.keyboard.type("pt with ldnot ");
+  await expect(ed).toHaveValue("PATIENT with LUMBAR DISCS NOT IMPROVED BY MEDICAL TREATMENT ");
+  await page.keyboard.press("Backspace");
+  await expect(ed).toHaveValue("PATIENT with ldnot");
+  await page.keyboard.type(" advice mri");
+  await expect(page.getByRole("button", { name: /MRICX/ })).toBeVisible();
+  await page.screenshot({ path: `test-results/${info.project.name}-6-abbr-typing.png` });
+  await page.getByRole("button", { name: /MRICX/ }).click();
+  await expect(ed).toHaveValue("PATIENT with ldnot advice MRI CERVICAL SPINE ");
+  await page.getByRole("button", { name: "Abbreviations" }).first().click();
+  await expect(page.getByRole("dialog", { name: "Abbreviations" })).toBeVisible();
+  await page.screenshot({ path: `test-results/${info.project.name}-7-abbr-manager.png` });
+});

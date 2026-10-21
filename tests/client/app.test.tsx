@@ -19,6 +19,7 @@ function installFetch(plans: ApiPlan[]) {
   calls = [];
   const api = mockApi(plans, calls);
   vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+    if (String(url).includes("/api/abbreviations")) return Promise.resolve(new Response(JSON.stringify({ storage: "device", entries: [] }), { headers: { "content-type": "application/json" } }));
     if (String(url).includes("/api/auth/session")) return Promise.resolve(new Response(JSON.stringify({ required: false, authenticated: true, configured: true }), { headers: { "content-type": "application/json" } }));
     return api(url, init);
   });
@@ -136,5 +137,62 @@ describe("App", () => {
     await screen.findByText(/onerror/);
     expect(document.querySelector("img[src=x]")).toBeNull();
     expect(document.querySelector("b")).toBeNull();
+  });
+});
+
+/** Simulates one keystroke the way a browser does: value changes, then an InputEvent with inputType/data. */
+function typeKey(el: HTMLTextAreaElement, next: string, inputType: string, data: string | null) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+  setter.call(el, next);
+  el.setSelectionRange(next.length, next.length);
+  el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType, data }));
+}
+
+describe("App — abbreviations", () => {
+  it("expands while typing, Backspace restores, and suggestions insert on tap", async () => {
+    installFetch([]);
+    render(<App modelName="m" maxChars={8000} />);
+    const el = editor();
+    await act(async () => typeKey(el, "pt", "insertText", "t"));
+    await act(async () => typeKey(el, "pt ", "insertText", " "));
+    expect(el.value).toBe("PATIENT ");
+    await act(async () => typeKey(el, "PATIENT", "deleteContentBackward", null));
+    expect(el.value).toBe("pt");
+    await act(async () => typeKey(el, "pt mril", "insertText", "l"));
+    fireEvent.click(await screen.findByRole("button", { name: /MRILDD/ }));
+    expect(el.value).toBe("pt MRI LSS DEXA AND DYNAMIC STUDY ");
+  });
+
+  it("can add a new abbreviation from the manager and use it immediately", async () => {
+    installFetch([]);
+    render(<App modelName="m" maxChars={8000} />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Abbreviations" })[0]!);
+    fireEvent.click(await screen.findByRole("button", { name: "+ New" }));
+    fireEvent.change(screen.getByPlaceholderText("CDNOT"), { target: { value: "zz9" } });
+    fireEvent.change(screen.getByPlaceholderText("What it expands to"), { target: { value: "TEST EXPANSION" } });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save" })));
+    expect(screen.getByText("ZZ9")).toBeTruthy();
+    const el = editor();
+    await act(async () => typeKey(el, "zz9.", "insertText", "."));
+    expect(el.value).toBe("TEST EXPANSION.");
+  });
+
+  it("expand-all chip expands pasted abbreviations and keeps an undo", async () => {
+    installFetch([]);
+    render(<App modelName="m" maxChars={8000} />);
+    fireEvent.change(editor(), { target: { value: "PT LBPRT for MTPT then" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Expand 3 abbreviation/ }));
+    expect(editor().value).toBe("PATIENT LBP AND RT SCIATICA for MEDICAL TREATMENT THEN PHYSIOTHERAPY then");
+    fireEvent.click(screen.getByRole("button", { name: "Restore previous original" }));
+    expect(editor().value).toBe("PT LBPRT for MTPT then");
+  });
+
+  it("an abbreviation typed as the last word is expanded before sending", async () => {
+    installFetch([{ kind: "stream", steps: [start, delta("ok"), done()] }]);
+    render(<App modelName="m" maxChars={8000} />);
+    fireEvent.change(editor(), { target: { value: "advice MTPT" } });
+    fireEvent.click(rephraseBtn());
+    await screen.findByText("ok");
+    expect(calls[0]!.body.text).toBe("advice MEDICAL TREATMENT THEN PHYSIOTHERAPY");
   });
 });

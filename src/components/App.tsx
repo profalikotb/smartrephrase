@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_OPTIONS, charLength, requestFingerprint, type RewriteOptions, type Variant } from "@/lib/shared/options";
 import { MANUALLY_RETRYABLE, type ErrorCode } from "@/lib/shared/errors";
 import { checkFidelity, splitTerms } from "@/lib/shared/fidelity";
@@ -9,13 +9,16 @@ import { detectScript, textDirection, tidyOutput, wordCount } from "@/lib/shared
 import { DICTS, fmt, type UiLang } from "@/lib/client/i18n";
 import { DEFAULT_PREFS, addHistory, deleteSavedText, loadDraft, loadHistory, loadPrefs, saveDraft, savePrefs, type HistoryEntry, type Prefs, type ThemePref } from "@/lib/client/persistence";
 import { useRephrase } from "@/lib/client/useRephrase";
+import { useAbbreviations } from "@/lib/client/useAbbreviations";
+import { countExpandable, expandAll, expandOnInsert, revertExpansion, suggest, tokenBefore, type Abbreviation, type ExpandResult } from "@/lib/shared/abbreviations";
 import { fileStamp, useElapsed, useOnline, useVisualViewport } from "@/lib/client/hooks";
 import { IN_FLIGHT, type ResultRecord } from "@/lib/client/state";
 import { Controls } from "./Controls";
 import { ResultPane, type ResultView } from "./ResultPane";
 import { ConfirmDialog, LoginGate, PrivacyDialog, Toast } from "./Dialogs";
+import { AbbreviationsDialog } from "./AbbreviationsDialog";
 import { Button, Chip } from "./ui";
-import { IconLogout, IconMonitor, IconMoon, IconPaste, IconRetry, IconCheck, IconCopy, IconShare, IconShield, IconSparkle, IconStop, IconSun, IconTrash, IconWifiOff } from "./icons";
+import { IconAbbr, IconPlus, IconLogout, IconMonitor, IconMoon, IconPaste, IconRetry, IconCheck, IconCopy, IconShare, IconShield, IconSparkle, IconStop, IconSun, IconTrash, IconWifiOff } from "./icons";
 
 interface SessionInfo {
   required: boolean;
@@ -47,9 +50,17 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [wasOffline, setWasOffline] = useState(false);
   const sourceRef = useRef<HTMLTextAreaElement>(null);
+  const [abbrOpen, setAbbrOpen] = useState(false);
+  const [abbrPrefill, setAbbrPrefill] = useState("");
+  const [caret, setCaret] = useState<number | null>(null);
+  const pendingCaret = useRef<number | null>(null);
+  const lastExpansion = useRef<ExpandResult["expansion"] | null>(null);
+  /** After the user undoes an expansion, don't re-expand that same word when they type the next space. */
+  const suppressed = useRef<{ start: number; abbr: string } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const rp = useRephrase();
+  const abbr = useAbbreviations(Boolean(session && (!session.required || session.authenticated)));
   const { state } = rp;
   const online = useOnline();
   const keyboardOpen = useVisualViewport();
@@ -234,6 +245,95 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
 
   const canSubmit = source.trim().length > 0 && over <= 0;
 
+  // ---------- Abbreviations ----------
+  useLayoutEffect(() => {
+    const el = sourceRef.current;
+    if (el && pendingCaret.current !== null) {
+      el.setSelectionRange(pendingCaret.current, pendingCaret.current);
+      setCaret(pendingCaret.current);
+      pendingCaret.current = null;
+    }
+  }, [source]);
+
+  const onSourceChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const value = e.target.value;
+      const pos = e.target.selectionStart ?? value.length;
+      const ne = e.nativeEvent as InputEvent;
+      const type = ne.inputType ?? "";
+      const exp = lastExpansion.current;
+      lastExpansion.current = null;
+
+      // Backspace right after an expansion → back to the abbreviation.
+      if (exp && type === "deleteContentBackward") {
+        const back = revertExpansion(value, pos, exp);
+        if (back) {
+          suppressed.current = { start: exp.start, abbr: exp.abbr };
+          pendingCaret.current = back.caret;
+          setSource(back.text);
+          return;
+        }
+      }
+      if (prefs.abbrExpand) {
+        const inserted = type === "insertLineBreak" || type === "insertParagraph" ? "\n" : type.startsWith("insert") ? (ne.data ?? "") : "";
+        let r = expandOnInsert(value, pos, inserted, abbr.map);
+        const sup = suppressed.current;
+        if (r && sup && r.expansion.start === sup.start && r.expansion.abbr === sup.abbr) r = null;
+        if (inserted) suppressed.current = null;
+        if (r) {
+          lastExpansion.current = r.expansion;
+          pendingCaret.current = r.caret;
+          setSource(r.text);
+          return;
+        }
+      }
+      setCaret(pos);
+      setSource(value);
+    },
+    [prefs.abbrExpand, abbr.map],
+  );
+
+  const syncCaret = useCallback((e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    const el = e.currentTarget;
+    setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null);
+  }, []);
+
+  const currentToken = useMemo(() => (caret !== null && caret <= source.length ? tokenBefore(source, caret) : null), [caret, source]);
+  const suggestions = useMemo(() => (currentToken && currentToken.token.length >= 2 ? suggest(currentToken.token, abbr.entries, 6) : []), [currentToken, abbr.entries]);
+  const expandableCount = useMemo(() => {
+    if (source.length >= 20_000) return 0;
+    const n = countExpandable(source, abbr.map);
+    // The word still being typed will expand on its own when a space follows — don't nag about it.
+    return currentToken && prefs.abbrExpand && abbr.map.has(currentToken.token.toUpperCase()) ? n - 1 : n;
+  }, [source, abbr.map, currentToken, prefs.abbrExpand]);
+
+  const insertSuggestion = useCallback(
+    (a: Abbreviation) => {
+      if (!currentToken) return;
+      const next = source.slice(0, currentToken.start) + a.text + " " + source.slice(currentToken.end);
+      lastExpansion.current = null;
+      pendingCaret.current = currentToken.start + a.text.length + 1;
+      setSource(next);
+      sourceRef.current?.focus();
+    },
+    [currentToken, source],
+  );
+
+  const expandAllNow = useCallback(() => {
+    const r = expandAll(source, abbr.map);
+    if (!r.count) return;
+    setRestorable(source);
+    setSource(r.text);
+    notify(fmt(t.abbr.expanded, { n: r.count }, prefs.uiLang));
+  }, [source, abbr.map, notify, t, prefs.uiLang]);
+
+  const openAbbr = useCallback(() => {
+    const el = sourceRef.current;
+    const sel = el && document.activeElement === el && el.selectionStart !== el.selectionEnd ? source.slice(el.selectionStart, el.selectionEnd) : "";
+    setAbbrPrefill(sel);
+    setAbbrOpen(true);
+  }, [source]);
+
   const run = useCallback(
     (text: string, options: RewriteOptions, variant: Variant) => {
       if (variant === "single") {
@@ -247,8 +347,20 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
 
   const rephrase = useCallback(() => {
     if (!canSubmit) return;
-    run(source, prefs.options, "single");
-  }, [canSubmit, run, source, prefs.options]);
+    let text = source;
+    // An abbreviation typed as the very last word has no trailing space yet — expand it before sending.
+    if (prefs.abbrExpand) {
+      const trimmed = text.replace(/\s+$/, "");
+      const tok = tokenBefore(trimmed, trimmed.length);
+      const full = tok && abbr.map.get(tok.token.toUpperCase());
+      if (tok && full) {
+        text = trimmed.slice(0, tok.start) + full + text.slice(trimmed.length);
+        setSource(text);
+        if (charLength(text) > maxChars) return;
+      }
+    }
+    run(text, prefs.options, "single");
+  }, [canSubmit, run, source, prefs.options, prefs.abbrExpand, abbr.map, maxChars]);
 
   const retry = useCallback(() => {
     if (op) run(op.sourceText, op.options, op.variant);
@@ -480,10 +592,13 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
               {t.editor.restoreOriginal}
             </Button>
           )}
-          <Button compact icon={<IconPaste width={16} height={16} />} onClick={paste}>
+          <Button compact collapseLabel icon={<IconPlus width={16} height={16} />} onMouseDown={(e) => e.preventDefault()} onClick={openAbbr} title={t.abbr.add}>
+            {t.abbr.addShort}
+          </Button>
+          <Button compact collapseLabel icon={<IconPaste width={16} height={16} />} onClick={paste} title={t.actions.paste}>
             {t.actions.paste}
           </Button>
-          <Button compact icon={<IconTrash width={16} height={16} />} onClick={clear} disabled={!source && !result}>
+          <Button compact collapseLabel icon={<IconTrash width={16} height={16} />} onClick={clear} disabled={!source && !result} title={t.actions.clear}>
             {t.actions.clear}
           </Button>
         </div>
@@ -496,12 +611,40 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
         aria-invalid={over > 0}
         dir={source ? sourceDir : uiDir}
         value={source}
-        onChange={(e) => setSource(e.target.value)}
+        onChange={onSourceChange}
+        onSelect={syncCaret}
+        onBlur={() => setCaret(null)}
         placeholder={t.editor.sourcePlaceholder}
         spellCheck
         autoCapitalize="sentences"
         className="prose-text bidi-plain scroll-thin block min-h-0 w-full flex-1 resize-none overscroll-contain bg-transparent px-4 py-3 text-ink placeholder:text-muted/70"
       />
+      {(suggestions.length > 0 || expandableCount > 0) && (
+        <div className="no-scrollbar flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-line bg-source-soft/60 px-2 py-1.5" aria-label={t.abbr.title}>
+          {expandableCount > 0 && (
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={expandAllNow} className="tap flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-source px-3.5 text-[13px] font-semibold text-white shadow-sm">
+              <IconAbbr width={16} height={16} /> {fmt(t.abbr.expandAll, { n: expandableCount }, prefs.uiLang)}
+            </button>
+          )}
+          {suggestions.map((a) => (
+            <button
+              key={a.key}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => insertSuggestion(a)}
+              title={t.abbr.tapToInsert}
+              className="tap flex h-9 max-w-[18rem] shrink-0 items-center gap-1.5 rounded-full border border-source/25 bg-surface px-3 text-[13px] shadow-sm hover:border-source/60"
+            >
+              <b dir="ltr" className="text-source">
+                {a.key}
+              </b>
+              <span dir="auto" className="truncate text-muted">
+                {a.text}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
       <footer id="source-count" className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line px-3 py-1.5 text-[12px] text-muted">
         <span className="tabular-nums">
           {words.toLocaleString(prefs.uiLang === "ar" ? "ar-EG" : "en-GB")} {t.editor.words} ·{" "}
@@ -585,6 +728,9 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
               title={`${t.ui.theme}: ${prefs.theme === "dark" ? t.ui.themeDark : prefs.theme === "light" ? t.ui.themeLight : t.ui.themeSystem}`}
             >
               {`${t.ui.theme}: ${prefs.theme === "dark" ? t.ui.themeDark : prefs.theme === "light" ? t.ui.themeLight : t.ui.themeSystem}`}
+            </Button>
+            <Button iconOnly icon={<IconAbbr />} onClick={openAbbr} title={t.abbr.open}>
+              {t.abbr.open}
             </Button>
             <Button iconOnly icon={<IconShield />} onClick={() => setPrivacyOpen(true)} title={t.ui.privacy}>
               {t.ui.privacy}
@@ -681,6 +827,19 @@ export function App({ modelName, maxChars }: { modelName: string; maxChars: numb
         </div>
       </div>
 
+      <AbbreviationsDialog
+        t={t}
+        lang={prefs.uiLang}
+        open={abbrOpen}
+        onClose={() => setAbbrOpen(false)}
+        entries={abbr.entries}
+        storage={abbr.storage}
+        mutate={abbr.mutate}
+        autoExpand={prefs.abbrExpand}
+        setAutoExpand={(v) => setPrefs((p) => ({ ...p, abbrExpand: v }))}
+        prefillText={abbrPrefill}
+        notify={notify}
+      />
       <ConfirmDialog t={t} open={confirmOpen} onCancel={() => setConfirmOpen(false)} onConfirm={doClear} />
       <PrivacyDialog
         t={t}

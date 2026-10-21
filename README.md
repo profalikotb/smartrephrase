@@ -116,6 +116,16 @@ Server-only secrets; zod validation of every field with `.strict()`; 64 KB body 
 
 ---
 
+## Abbreviations (text expansion)
+
+* **While typing** in the original text: type an abbreviation (any case) then a space, Enter or punctuation → it is replaced by its full text (`ldnot ` → `LUMBAR DISCS NOT IMPROVED BY MEDICAL TREATMENT `). Press **Backspace** immediately to get the abbreviation back (it then won't re-expand).
+* **Suggestion bar** under the editor shows matching abbreviations as you type 2+ letters — tap one to insert it. If the text contains unexpanded abbreviations (e.g. pasted notes), an **Expand N abbreviation(s)** chip expands them all; *Restore previous original* undoes it.
+* An abbreviation typed as the very last word is expanded automatically when you press **Rephrase**.
+* **Manage**: the **AB** button in the header (or **+** in the editor header) opens the list — search, add, edit, rename, delete, **Import list** (paste `ABB<Tab>FULL TEXT` lines straight from Excel/Access), **Export .tsv**, **Add missing defaults**, and the *Expand while typing* switch. Select a phrase in the editor before pressing **+** to pre-fill its full text.
+* **Storage**: with Upstash Redis connected, the list is stored in Redis (`sr:abbr:v1` hash) and **synced between phone and desktop**; each edit is atomic per entry. Without Redis the list is kept on the device only (the dialog says so). A cached copy is kept on each device for offline use.
+* The starter list lives in `src/lib/shared/abbreviations.ts` and only seeds an empty store — later edits are made in the app.
+* API: `GET/POST /api/abbreviations` (same password session, same-origin writes, 60 req/min).
+
 ## 5. Commands
 
 | Command | What it does |

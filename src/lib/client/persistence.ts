@@ -10,6 +10,8 @@ export interface Prefs {
   rememberDraft: boolean;
   saveHistory: boolean;
   privateMode: boolean;
+  /** Expand abbreviations while typing in the original editor. */
+  abbrExpand: boolean;
 }
 
 export interface HistoryEntry {
@@ -23,7 +25,7 @@ export interface HistoryEntry {
 export const KEYS = { prefs: "sr:prefs:v1", draft: "sr:draft:v1", history: "sr:history:v1" } as const;
 export const HISTORY_MAX = 20;
 
-export const DEFAULT_PREFS: Prefs = { uiLang: "ar", theme: "system", options: DEFAULT_OPTIONS, rememberDraft: false, saveHistory: false, privateMode: false };
+export const DEFAULT_PREFS: Prefs = { uiLang: "ar", theme: "system", options: DEFAULT_OPTIONS, rememberDraft: false, saveHistory: false, privateMode: false, abbrExpand: true };
 
 /** Every storage access is guarded: Safari private mode, blocked cookies and quota errors must never break the app. */
 function store(): Storage | null {
@@ -72,6 +74,7 @@ export function loadPrefs(defaultLang: UiLang = DEFAULT_PREFS.uiLang): Prefs {
     rememberDraft: p.rememberDraft === true && p.privateMode !== true,
     saveHistory: p.saveHistory === true && p.privateMode !== true,
     privateMode: p.privateMode === true,
+    abbrExpand: p.abbrExpand !== false,
   };
 }
 
